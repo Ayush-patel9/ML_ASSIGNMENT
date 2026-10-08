@@ -66,10 +66,17 @@ ML_ASSIGNMENT/
 │   ├── BT2024054_pred_var1_m4.csv        # Overfit predictions (Model 4)
 │   └── BT2024054_pred_var2_m4.csv        # Overfit predictions (Model 4)
 ├── train_predict.py                      # ★ Main production script (Generates final submission)
+├── generate_plots.py                     # Generates all 5 publication-quality figures
 ├── model1_baseline.py                    # Stage 1: Naive PDF-hint baseline implementation
 ├── model2_ols_sweep.py                   # Stage 2: Data-driven OLS feature & degree sweep
 ├── model3_regularized.py                 # Stage 3: Regularized Lasso & Ridge model
 ├── model4_overfit.py                     # Stage 4: High-degree intentional overfit demonstration
+├── figures/                              # Generated high-resolution diagnostic plots (300 DPI)
+│   ├── model_comparison.png              # Comparison of R² and MSE across all 4 stages
+│   ├── bias_variance_tradeoff.png        # Degree sweeps & U-shaped error curves
+│   ├── actual_vs_predicted.png           # Ground truth vs predicted scatter with 1:1 line
+│   ├── residual_diagnostics.png          # Error distributions & homoscedasticity checks
+│   └── sparsity_and_coefficients.png     # Lasso sparsity pruning & Ridge shrinkage spectrum
 ├── REPORT.md                             # Comprehensive technical report (Markdown format)
 └── README.md                             # Repository overview and guide
 ```
@@ -81,7 +88,7 @@ ML_ASSIGNMENT/
 ### 1. Environment Setup
 The codebase requires standard scientific Python libraries:
 ```bash
-pip install numpy pandas scikit-learn
+pip install numpy pandas scikit-learn matplotlib
 ```
 
 ### 2. Generate Final Predictions (Recommended)
@@ -93,7 +100,13 @@ This script will output:
 - `BT2024054/BT2024054_pred_var1.csv`
 - `BT2024054/BT2024054_pred_var2.csv`
 
-### 3. Replicate the Experimental Journey (Individual Stages)
+### 3. Generate Diagnostic Visualizations
+To re-generate all high-resolution figures into the `figures/` directory:
+```bash
+python3 generate_plots.py
+```
+
+### 4. Replicate the Experimental Journey (Individual Stages)
 Each experimental stage can be executed independently to observe the performance progression:
 
 ```bash
@@ -109,6 +122,32 @@ python3 model3_regularized.py
 # Stage 4: Run extreme overfit demonstration
 python3 model4_overfit.py
 ```
+
+---
+
+## 📈 Visualizations & Diagnostic Figures
+
+The repository includes publication-grade diagnostic plots generated at 300 DPI:
+
+### 1. Model Progression Across Stages
+Comparison of Cross-Validation $R^2$ and logarithmic Mean Squared Error across all four model configurations:
+![Model Comparison](figures/model_comparison.png)
+
+### 2. Bias-Variance Tradeoff Curves
+Validation MSE trajectories showing the U-shaped error curves as polynomial degree increases:
+![Bias-Variance Tradeoff](figures/bias_variance_tradeoff.png)
+
+### 3. Actual vs. Predicted Plots
+Out-of-fold cross-validated predictions plotted against ground truth labels along the ideal 1:1 reference line:
+![Actual vs Predicted](figures/actual_vs_predicted.png)
+
+### 4. Sparsity & Coefficient Shrinkage
+Visual proof of Lasso's automated feature selection (pruning 78.8% of terms) and Ridge's smooth weight stabilization:
+![Sparsity and Coefficients](figures/sparsity_and_coefficients.png)
+
+### 5. Residual Distribution Diagnostics
+Error histograms and residual-vs-fitted plots confirming zero-mean Gaussian distribution and homoscedasticity:
+![Residual Diagnostics](figures/residual_diagnostics.png)
 
 ---
 
