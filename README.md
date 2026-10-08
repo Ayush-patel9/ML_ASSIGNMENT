@@ -82,6 +82,9 @@ ML_ASSIGNMENT/
 │   ├── BT2024054_test_var2.csv           # Test inputs for var2 (1000 rows)
 │   ├── BT2024054_pred_var1.csv           # Final submission predictions (var1)
 │   └── BT2024054_pred_var2.csv           # Final submission predictions (var2)
+├── BT2024054_Report.pdf                  # ★ Official submission PDF report (exactly 5 pages)
+├── REPORT.pdf                            # Alias of submission PDF report
+├── build_pdf.py                          # Script to build the 5-page PDF report
 ├── train_predict.py                      # Main script for final models & predictions
 ├── generate_plots.py                     # Generates all figures in ./figures/
 ├── model1_baseline.py                    # Stage 1: Baseline model (PDF hints)
