@@ -1,8 +1,3 @@
-"""
-Generate Publication-Quality Visualizations for ML Assignment 1 (Polynomial Regression)
-Roll Number: BT2024054 | Student: Ayush Patel
-"""
-
 import os
 import numpy as np
 import pandas as pd
@@ -28,7 +23,6 @@ plt.rcParams.update({
 
 kf = KFold(n_splits=5, shuffle=True, random_state=42)
 
-# Load data
 tr1 = pd.read_csv("BT2024054/BT2024054_train_var1.csv")
 X1 = tr1[["x1", "x2", "x3", "x4", "x5", "x6"]].values
 y1 = tr1["y"].values
@@ -37,25 +31,18 @@ tr2 = pd.read_csv("BT2024054/BT2024054_train_var2.csv")
 X2 = tr2[["x1", "x2", "x3"]].values
 y2 = tr2["y"].values
 
-print("Generating Plot 1: Model Comparison Across All 4 Stages...")
-# ==============================================================================
-# Plot 1: Model Comparison (R² and MSE)
-# ==============================================================================
+# 1. Model comparison bar chart
 models = ["M1: Baseline\n(PDF Hints)", "M2: OLS Sweep\n(All Features)", "M3+: Tuned Reg\n(WINNER)", "M4: Overfit\n(Excessive Deg)"]
 var1_r2 = [0.1838, 0.9230, 0.9689, 0.6757]
 var1_mse = [8.9044, 0.8081, 0.3218, 3.4140]
-
-var2_r2 = [0.1058, 0.9927, 0.9929, -4.906]  # Clamped visually for overfit
+var2_r2 = [0.1058, 0.9927, 0.9929, -4.906]
 var2_mse = [36.678, 0.2896, 0.2835, 285.50]
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5.5))
-
 x = np.arange(len(models))
 width = 0.35
 
-# Subplot 1: CV R²
 rects1 = ax1.bar(x - width/2, var1_r2, width, label="var1 (Net Power)", color="#2b5c8f", edgecolor="black", alpha=0.85)
-# Clamp negative value for clean visual rendering with note
 var2_r2_plot = [v if v > 0 else -0.5 for v in var2_r2]
 rects2 = ax1.bar(x + width/2, var2_r2_plot, width, label="var2 (Thermal Anomaly)", color="#d95f02", edgecolor="black", alpha=0.85)
 
@@ -68,7 +55,6 @@ ax1.axhline(0, color="gray", linestyle="--", linewidth=0.8)
 ax1.axhline(1.0, color="green", linestyle=":", linewidth=0.8, alpha=0.7)
 ax1.legend(loc="upper left")
 
-# Annotate values
 for rect, val in zip(rects1, var1_r2):
     ax1.annotate(f"{val:.3f}", (rect.get_x() + rect.get_width() / 2, max(val, 0)),
                  xytext=(0, 4), textcoords="offset points", ha="center", va="bottom", fontsize=9, fontweight="bold")
@@ -79,7 +65,6 @@ for rect, val in zip(rects2, var2_r2):
                  xytext=(0, 4), textcoords="offset points", ha="center", va="bottom" if val > 0 else "top",
                  fontsize=9, fontweight="bold", color="darkred" if val < 0 else "black")
 
-# Subplot 2: CV MSE (Log Scale)
 rects3 = ax2.bar(x - width/2, var1_mse, width, label="var1 MSE", color="#2b5c8f", edgecolor="black", alpha=0.85)
 rects4 = ax2.bar(x + width/2, var2_mse, width, label="var2 MSE", color="#d95f02", edgecolor="black", alpha=0.85)
 ax2.set_ylabel("Cross-Validation Mean Squared Error (Log Scale)")
@@ -100,13 +85,9 @@ plt.tight_layout()
 plt.savefig("figures/model_comparison.png")
 plt.close()
 
-print("Generating Plot 2: Bias-Variance Degree Sweeps...")
-# ==============================================================================
-# Plot 2: Bias-Variance Tradeoff Curves
-# ==============================================================================
+# 2. Bias-variance tradeoff curves
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
-# var1 OLS sweep vs Lasso
 v1_degs = [1, 2, 3, 4, 5, 6]
 v1_mse_ols = [9.7633, 3.5145, 1.1650, 0.8081, 1.6288, 97.3203]
 ax1.plot(v1_degs, v1_mse_ols, marker="o", color="#d95f02", linewidth=2, label="OLS (Unregularized)")
@@ -124,7 +105,6 @@ ax1.set_title("var1 (Net Power): Bias-Variance Curve vs Degree")
 ax1.set_xticks(v1_degs)
 ax1.legend(loc="upper left")
 
-# var2 OLS sweep vs Ridge
 v2_degs = [1, 2, 3, 4, 6, 7, 8, 9, 10]
 v2_mse_ols = [32.1021, 19.7887, 11.1305, 3.4457, 0.6158, 0.3794, 0.2896, 0.3372, 0.3871]
 ax2.plot(v2_degs, v2_mse_ols, marker="s", color="#2b5c8f", linewidth=2, label="OLS (Unregularized)")
@@ -143,11 +123,7 @@ plt.tight_layout()
 plt.savefig("figures/bias_variance_tradeoff.png")
 plt.close()
 
-print("Generating Plot 3: Actual vs Predicted...")
-# ==============================================================================
-# Plot 3: Actual vs Predicted Scatter Plots
-# ==============================================================================
-# Generate out-of-fold predictions
+# 3. Actual vs predicted
 pf1 = PolynomialFeatures(degree=5)
 Xp1 = pf1.fit_transform(X1)
 m1_lasso = Lasso(alpha=0.00348, max_iter=30000)
@@ -160,7 +136,6 @@ pred_cv2 = cross_val_predict(m2_ridge, Xp2, y2, cv=kf)
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5.5))
 
-# var1
 res1 = np.abs(y1 - pred_cv1)
 scatter1 = ax1.scatter(y1, pred_cv1, c=res1, cmap="viridis", alpha=0.6, s=24, edgecolors="none")
 min1, max1 = min(y1.min(), pred_cv1.min()), max(y1.max(), pred_cv1.max())
@@ -172,7 +147,6 @@ ax1.legend(loc="upper left")
 cbar1 = plt.colorbar(scatter1, ax=ax1)
 cbar1.set_label(r"Absolute Error ($|y - \hat{y}|$)")
 
-# var2
 res2 = np.abs(y2 - pred_cv2)
 scatter2 = ax2.scatter(y2, pred_cv2, c=res2, cmap="plasma", alpha=0.6, s=24, edgecolors="none")
 min2, max2 = min(y2.min(), pred_cv2.min()), max(y2.max(), pred_cv2.max())
@@ -188,16 +162,11 @@ plt.tight_layout()
 plt.savefig("figures/actual_vs_predicted.png")
 plt.close()
 
-print("Generating Plot 4: Residual Diagnostics...")
-# ==============================================================================
-# Plot 4: Residual Distributions
-# ==============================================================================
+# 4. Residual diagnostics
 fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(13, 9))
-
 err1 = y1 - pred_cv1
 err2 = y2 - pred_cv2
 
-# Residual histogram var1
 ax1.hist(err1, bins=35, color="#2b5c8f", edgecolor="black", alpha=0.75, density=True)
 mu1, std1 = np.mean(err1), np.std(err1)
 norm_x1 = np.linspace(err1.min(), err1.max(), 100)
@@ -207,7 +176,6 @@ ax1.set_xlabel(r"Residual ($y - \hat{y}$)")
 ax1.set_ylabel("Density")
 ax1.legend()
 
-# Residual histogram var2
 ax2.hist(err2, bins=35, color="#d95f02", edgecolor="black", alpha=0.75, density=True)
 mu2, std2 = np.mean(err2), np.std(err2)
 norm_x2 = np.linspace(err2.min(), err2.max(), 100)
@@ -217,14 +185,12 @@ ax2.set_xlabel(r"Residual ($y - \hat{y}$)")
 ax2.set_ylabel("Density")
 ax2.legend()
 
-# Residual vs Fitted var1
 ax3.scatter(pred_cv1, err1, alpha=0.5, color="#2b5c8f", s=18)
 ax3.axhline(0, color="red", linestyle="--", linewidth=1.5)
 ax3.set_title(r"var1 Residuals vs Predicted Values (Homoscedasticity)")
 ax3.set_xlabel(r"Predicted ($\hat{y}$)")
 ax3.set_ylabel(r"Residual ($y - \hat{y}$)")
 
-# Residual vs Fitted var2
 ax4.scatter(pred_cv2, err2, alpha=0.5, color="#d95f02", s=18)
 ax4.axhline(0, color="red", linestyle="--", linewidth=1.5)
 ax4.set_title(r"var2 Residuals vs Predicted Values (Homoscedasticity)")
@@ -235,26 +201,17 @@ plt.tight_layout()
 plt.savefig("figures/residual_diagnostics.png")
 plt.close()
 
-print("Generating Plot 5: Sparsity & Weight Regularization...")
-# ==============================================================================
-# Plot 5: Sparsity & Regularization Effect
-# ==============================================================================
-# Fit full models to examine weights
+# 5. Sparsity and coefficients
 m1_lasso.fit(Xp1, y1)
 m2_ridge.fit(Xp2, y2)
 
-# Unconstrained overfit models
 pf_overfit = PolynomialFeatures(degree=15)
 Xp2_overfit = pf_overfit.fit_transform(X2)
 m_overfit = LinearRegression().fit(Xp2_overfit, y2)
 
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 7.5))
 
-# Top: var1 Lasso coefficients (showing sparsity)
 coefs1 = np.abs(m1_lasso.coef_)
-active_idx = np.where(coefs1 > 0)[0]
-zero_idx = np.where(coefs1 == 0)[0]
-
 ax1.stem(range(len(coefs1)), coefs1, linefmt="C0-", markerfmt="C0o", basefmt="k-")
 ax1.set_title(f"var1 Lasso Sparsity: 364 Terms Zeroed Out (78.8%) vs 98 Active Terms (21.2%)\n(Total: 462 Polynomial Features at Degree 5)")
 ax1.set_xlabel(r"Polynomial Monomial Index ($0 \dots 461$)")
@@ -263,7 +220,6 @@ ax1.annotate("Dense region pruned by L1", xy=(250, 0.05), xytext=(280, 0.4),
              arrowprops=dict(facecolor="black", shrink=0.08, width=1.2, headwidth=5),
              fontweight="bold")
 
-# Bottom: var2 Ridge vs Overfit OLS coefficients
 coefs2_ridge = np.sort(np.abs(m2_ridge.coef_))[::-1]
 coefs2_overfit = np.sort(np.abs(m_overfit.coef_))[::-1][:len(coefs2_ridge)]
 
@@ -279,4 +235,4 @@ plt.tight_layout()
 plt.savefig("figures/sparsity_and_coefficients.png")
 plt.close()
 
-print("All 5 plots successfully generated and saved to ./figures/")
+print("Saved all 5 plots to ./figures/")
