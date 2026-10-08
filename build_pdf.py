@@ -2,6 +2,8 @@ import os
 import shutil
 import subprocess
 import fitz
+import numpy as np
+from PIL import Image
 
 HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en">
@@ -11,53 +13,98 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <style>
   @page {
     size: A4 portrait;
-    margin: 10.5mm 12mm 10.5mm 12mm;
+    margin: 11mm 12mm 11mm 12mm;
+    @bottom-right {
+      content: counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #64748b;
+    }
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
   }
 
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    font-size: 9.1pt;
-    line-height: 1.34;
-    color: #1a1a1a;
+    font-size: 8.9pt;
+    line-height: 1.35;
+    color: #1e293b;
     margin: 0;
     padding: 0;
   }
 
-  h1.doc-title {
+  /* Header banner */
+  .header-card {
+    border-bottom: 2px solid #1e3a8a;
+    padding-bottom: 5px;
+    margin-bottom: 8px;
+  }
+  .doc-title {
     font-size: 15.5pt;
     font-weight: 700;
-    margin: 0 0 3px 0;
+    margin: 0 0 4px 0;
     color: #0f2d59;
-    letter-spacing: -0.2px;
+    letter-spacing: -0.3px;
+    line-height: 1.2;
   }
-
-  .meta-bar {
-    font-size: 8.6pt;
-    color: #334155;
-    border-bottom: 1.5px solid #0f2d59;
-    padding-bottom: 4px;
-    margin-bottom: 7px;
+  .meta-grid {
     display: flex;
     justify-content: space-between;
     flex-wrap: wrap;
+    font-size: 8.4pt;
+    color: #475569;
   }
-  .meta-bar span { margin-right: 14px; }
-  .meta-bar a { color: #1d4ed8; text-decoration: none; font-weight: 500; }
+  .meta-grid span { margin-right: 12px; }
+  .meta-grid a { color: #2563eb; text-decoration: none; font-weight: 600; }
 
+  /* Metric cards */
+  .metrics-banner {
+    display: flex;
+    gap: 8px;
+    margin: 6px 0 8px 0;
+  }
+  .metric-pill {
+    flex: 1;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-left: 3px solid #2563eb;
+    border-radius: 4px;
+    padding: 4px 7px;
+  }
+  .metric-pill .lbl {
+    font-size: 7.2pt;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #64748b;
+    letter-spacing: 0.3px;
+  }
+  .metric-pill .val {
+    font-size: 10pt;
+    font-weight: 700;
+    color: #0f2d59;
+  }
+  .metric-pill .sub {
+    font-size: 7.2pt;
+    color: #475569;
+  }
+
+  /* Headings */
   h2 {
-    font-size: 11pt;
+    font-size: 10.8pt;
     font-weight: 700;
     color: #0f2d59;
     margin: 7px 0 3px 0;
-    border-bottom: 0.8px solid #cbd5e1;
+    border-bottom: 1px solid #cbd5e1;
     padding-bottom: 2px;
+    break-after: avoid;
   }
-
   h3 {
-    font-size: 9.6pt;
+    font-size: 9.3pt;
     font-weight: 600;
     color: #1e3a8a;
     margin: 5px 0 2px 0;
+    break-after: avoid;
   }
 
   p { margin: 0 0 4.5px 0; }
@@ -67,32 +114,35 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   strong { font-weight: 600; color: #0f172a; }
   code {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 8.1pt;
+    font-size: 8pt;
     background: #f1f5f9;
     padding: 1px 3px;
     border-radius: 3px;
     color: #0f172a;
+    border: 0.5px solid #e2e8f0;
   }
 
   pre {
     background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 4px;
     padding: 5px 8px;
-    font-size: 7.6pt;
+    font-size: 7.5pt;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     margin: 3px 0 5px 0;
     line-height: 1.25;
+    break-inside: avoid;
   }
 
+  /* Tables */
   table {
     width: 100%;
     border-collapse: collapse;
-    margin: 4px 0 6px 0;
-    font-size: 8.1pt;
-    page-break-inside: avoid;
+    margin: 5px 0 7px 0;
+    font-size: 8pt;
+    break-inside: avoid;
+    box-shadow: 0 0.5px 1px rgba(0,0,0,0.04);
   }
-
   th {
     background: #0f2d59;
     color: #ffffff;
@@ -101,92 +151,138 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     padding: 3.5px 6px;
     border: 1px solid #0f2d59;
   }
-
   td {
     padding: 3px 6px;
     border: 1px solid #e2e8f0;
     vertical-align: middle;
   }
-
   tr:nth-child(even) td { background: #f8fafc; }
-  tr.highlight td { background: #eff6ff; font-weight: 600; }
+  tr.highlight td {
+    background: #eff6ff;
+    font-weight: 600;
+    border-top: 1px solid #bfdbfe;
+    border-bottom: 1px solid #bfdbfe;
+  }
+  .badge {
+    display: inline-block;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 7pt;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .badge-win { background: #dcfce7; color: #166534; border: 0.5px solid #86efac; }
+  .badge-warn { background: #fee2e2; color: #991b1b; border: 0.5px solid #fca5a5; }
 
+  /* Figures */
   .figure-box {
     text-align: center;
-    margin: 4px 0 6px 0;
-    page-break-inside: avoid;
+    margin: 5px 0 7px 0;
+    break-inside: avoid;
   }
   .figure-box img {
     max-width: 95%;
     height: auto;
-    max-height: 165px;
-    border-radius: 3px;
-    border: 0.8px solid #cbd5e1;
+    max-height: 172px;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
   }
   .figure-caption {
-    font-size: 7.6pt;
+    font-size: 7.5pt;
     color: #475569;
     margin-top: 2px;
     font-style: italic;
   }
 
+  /* Two-column grid */
   .grid-2 {
     display: flex;
-    gap: 10px;
+    gap: 9px;
     margin-bottom: 4px;
+    break-inside: avoid;
   }
   .grid-2 > div { flex: 1; }
 
   .callout {
     background: #f0f7ff;
-    border-left: 3px solid #2563eb;
-    padding: 4px 7px;
-    margin: 4px 0;
-    font-size: 8.5pt;
+    border: 1px solid #bfdbfe;
+    border-left: 3.5px solid #2563eb;
+    padding: 5px 8px;
+    margin: 5px 0;
+    font-size: 8.4pt;
     border-radius: 0 4px 4px 0;
+    break-inside: avoid;
   }
 
   .page-footer {
     display: flex;
     justify-content: space-between;
-    font-size: 7.5pt;
-    color: #64748b;
+    font-size: 7.2pt;
+    color: #94a3b8;
     border-top: 0.5px solid #e2e8f0;
     padding-top: 2px;
     margin-top: 6px;
+    break-inside: avoid;
   }
 
+  /* Page break utilities */
   .page-break { page-break-before: always; }
+  .avoid-break { break-inside: avoid; }
 </style>
 </head>
 <body>
 
   <!-- ==================== PAGE 1 ==================== -->
-  <h1 class="doc-title">Machine Learning Assignment 1: Polynomial Regression Report</h1>
-  <div class="meta-bar">
-    <span><strong>Student:</strong> Ayush Patel</span>
-    <span><strong>Roll Number:</strong> BT2024054</span>
-    <span><strong>Problems:</strong> <code>var1</code> &amp; <code>var2</code></span>
-    <span><strong>GitHub:</strong> <a href="https://github.com/Ayush-patel9/ML_ASSIGNMENT">github.com/Ayush-patel9/ML_ASSIGNMENT</a></span>
+  <div class="header-card">
+    <h1 class="doc-title">Machine Learning Assignment 1: Polynomial Regression Report</h1>
+    <div class="meta-grid">
+      <span><strong>Student:</strong> Ayush Patel</span>
+      <span><strong>Roll Number:</strong> BT2024054</span>
+      <span><strong>Assigned Problems:</strong> <code>var1</code> &amp; <code>var2</code></span>
+      <span><strong>Repository:</strong> <a href="https://github.com/Ayush-patel9/ML_ASSIGNMENT">github.com/Ayush-patel9/ML_ASSIGNMENT</a></span>
+    </div>
+  </div>
+
+  <div class="metrics-banner">
+    <div class="metric-pill">
+      <div class="lbl">var1 Net Power (Lasso)</div>
+      <div class="val">CV R&sup2; = 0.9689</div>
+      <div class="sub">CV MSE: 0.3218 &bull; Deg 5 (98 active)</div>
+    </div>
+    <div class="metric-pill">
+      <div class="lbl">var2 Thermal Anomaly (Ridge)</div>
+      <div class="val">CV R&sup2; = 0.9929</div>
+      <div class="sub">CV MSE: 0.2835 &bull; Deg 9 (norm 38.9)</div>
+    </div>
+    <div class="metric-pill">
+      <div class="lbl">Baseline &rarr; Final Gain</div>
+      <div class="val">+0.785 / +0.887 R&sup2;</div>
+      <div class="sub">96.4% &amp; 99.2% MSE reduction</div>
+    </div>
+    <div class="metric-pill">
+      <div class="lbl">Constraint Compliance</div>
+      <div class="val">Strict Polynomial</div>
+      <div class="sub">5-Fold CV &bull; 0 Data Leakage</div>
+    </div>
   </div>
 
   <h2>1. Introduction &amp; Overview</h2>
   <p>
-    This report documents the polynomial regression models developed for two distinct engineering prediction tasks assigned to roll number <strong>BT2024054</strong>:
+    This report documents the polynomial regression models built for two distinct engineering prediction problems assigned to my roll number (<strong>BT2024054</strong>):
   </p>
   <ul>
-    <li><strong>Problem 1 (<code>var1</code>) &mdash; Steam Turbine Net Power Score:</strong> Predicting the electrical output of a multi-stage steam turbine from 6 operational parameters (steam valve, coolant flow rate, pump pressure, blade pitch, exhaust rate, and inlet pressure).</li>
-    <li><strong>Problem 2 (<code>var2</code>) &mdash; Subterranean Thermal Anomaly Score:</strong> Mapping subsurface geothermal reservoir temperatures across a continuous 3D spatial field from sensor offsets (<i>x</i><sub>1</sub>: East-West, <i>x</i><sub>2</sub>: North-South, <i>x</i><sub>3</sub>: Depth).</li>
+    <li><strong>Problem 1 (<code>var1</code>) &mdash; Steam Turbine Net Power Score:</strong> Predicting power output from 6 operational parameters (steam valve, coolant flow rate, pump pressure, blade pitch, exhaust rate, and inlet pressure).</li>
+    <li><strong>Problem 2 (<code>var2</code>) &mdash; Subterranean Thermal Anomaly Score:</strong> Mapping subsurface temperatures across a 3D geological reservoir from spatial offsets (<i>x</i><sub>1</sub>: East-West, <i>x</i><sub>2</sub>: North-South, <i>x</i><sub>3</sub>: Depth).</li>
   </ul>
   <p>
-    The assignment required using <strong>strictly polynomial regression</strong>. Non-polynomial architectures (such as decision trees, random forests, or neural networks) were not permitted. When I tested the starting hints mentioned in the problem description (degree 3 on <i>x</i><sub>1</sub>&ndash;<i>x</i><sub>3</sub> for <code>var1</code>, and degree 4 on <i>x</i><sub>1</sub> alone for <code>var2</code>), the validation score was poor (<i>R</i><sup>2</sup> &approx; 0.18 and 0.10). To find the true underlying models, I followed a four-stage progression:
+    The assignment required using <strong>strictly polynomial regression</strong> without non-polynomial architectures (like neural networks or decision trees). When I initially tested the starting hints mentioned in the assignment prompt (degree 3 on <i>x</i><sub>1</sub>&ndash;<i>x</i><sub>3</sub> for <code>var1</code>, and degree 4 on <i>x</i><sub>1</sub> for <code>var2</code>), the validation score was poor (<i>R</i><sup>2</sup> &approx; 0.18 and 0.10). To find the true models, I followed a four-stage progression:
   </p>
   <div class="callout">
-    <strong>Developmental Trajectory:</strong>
-    <strong>M1 (Baseline):</strong> Tested PDF hints literally with OLS &rarr; severe underfitting (<i>R</i><sup>2</sup> &approx; 0.10 &ndash; 0.18). &bull; 
-    <strong>M2 (OLS Sweep):</strong> Evaluated all features across degrees &rarr; massive jump (<i>R</i><sup>2</sup> &approx; 0.92 &ndash; 0.99), but hit unregularized variance limit. &bull; 
+    <strong>Four-Stage Trajectory:</strong>
+    <strong>M1 (Baseline):</strong> Tested PDF hints literally with OLS &rarr; heavy underfitting (<i>R</i><sup>2</sup> &approx; 0.10 &ndash; 0.18). &bull; 
+    <strong>M2 (OLS Sweep):</strong> Added all features across degrees &rarr; massive jump (<i>R</i><sup>2</sup> &approx; 0.92 &ndash; 0.99), but hit unregularized variance limit. &bull; 
     <strong>M3+ (Regularized &mdash; Final):</strong> Applied Lasso (<i>L</i><sub>1</sub>) to prune 78.8% of turbine terms, and Ridge (<i>L</i><sub>2</sub>) to smoothly stabilize 3D heat fields &rarr; peak generalization (<strong>var1 CV <i>R</i><sup>2</sup> = 0.9689, MSE = 0.3218</strong>; <strong>var2 CV <i>R</i><sup>2</sup> = 0.9929, MSE = 0.2835</strong>). &bull; 
-    <strong>M4 (Overfit Demo):</strong> Pushed degrees to 8 &amp; 15 with OLS &rarr; training error near zero, but validation MSE exploded to 285.50 (<i>R</i><sup>2</sup> = &minus;4.906).
+    <strong>M4 (Overfit Demo):</strong> Pushed degrees to 8 &amp; 15 with unregularized OLS &rarr; training error near zero, but validation MSE exploded to 285.50 (<i>R</i><sup>2</sup> = &minus;4.906).
   </div>
 
   <h2>2. Exploring the Datasets</h2>
@@ -194,20 +290,20 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <div>
       <h3>2.1 Turbine Net Power Score (<code>var1</code>)</h3>
       <p>
-        Power generation in a steam turbine follows thermodynamic laws (Brayton cycle). Net work depends on 6 operational controls (<i>x</i><sub>1</sub>&ndash;<i>x</i><sub>6</sub>) normalized in [&minus;1.0, 1.0]. The training set contains 1,000 samples with target mean &mu; = 0.76, std &sigma; = 3.31, spanning [&minus;10.43, 11.48]. In real turbines, inputs interact (e.g. pressure &times; valve opening), but arbitrary 5-way cross products rarely correspond to physical processes. This pointed to a <strong>sparse polynomial</strong> structure.
+        Power generation follows thermodynamic laws (Brayton cycle). Net work depends on 6 operational controls (<i>x</i><sub>1</sub>&ndash;<i>x</i><sub>6</sub>) normalized in [&minus;1.0, 1.0]. The dataset contains 1,000 training samples with target mean &mu; = 0.76, std &sigma; = 3.31, spanning [&minus;10.43, 11.48]. Inputs interact (e.g. pressure &times; valve opening), but arbitrary 5-way cross products rarely correspond to physical processes. This pointed to a <strong>sparse polynomial</strong>.
       </p>
     </div>
     <div>
       <h3>2.2 Thermal Anomaly Score (<code>var2</code>)</h3>
       <p>
-        Heat conduction in subterranean reservoirs obeys continuous harmonic physics (&nabla;<sup>2</sup><i>T</i> = 0 in steady state). Sensor offsets (<i>x</i><sub>1</sub>, <i>x</i><sub>2</sub>, <i>x</i><sub>3</sub>) are normalized in [&minus;1.0, 1.0]. The training set has 1,000 samples with target mean &mu; = 2.40, std &sigma; = 6.41, spanning [&minus;29.69, 39.25]. Because thermal fields vary smoothly in 3D, all spatial derivatives contribute, requiring a <strong>dense, smoothly regularized polynomial</strong>.
+        Heat conduction in subterranean rock obeys continuous harmonic physics (&nabla;<sup>2</sup><i>T</i> = 0 in steady state). Spatial offsets (<i>x</i><sub>1</sub>, <i>x</i><sub>2</sub>, <i>x</i><sub>3</sub>) are normalized in [&minus;1.0, 1.0]. The dataset contains 1,000 training samples with target mean &mu; = 2.40, std &sigma; = 6.41, spanning [&minus;29.69, 39.25]. Because heat varies continuously across 3D space, all spatial derivatives contribute, requiring a <strong>dense, smoothly regularized polynomial</strong>.
       </p>
     </div>
   </div>
 
   <h2>3. Polynomial Expansion &amp; Regularization</h2>
   <p>
-    Polynomial regression maps <i>d</i> features into monomial terms up to degree <i>D</i>: <i>y&#770;</i> = &Sigma; <i>w<sub>j</sub></i> &phi;<sub><i>j</i></sub>(<b>x</b>) + <i>b</i>. The total number of terms <i>P</i> is given by combinations with repetition: <i>P</i> = C(<i>d</i> + <i>D</i>, <i>D</i>) = (<i>d</i> + <i>D</i>)! / (<i>d</i>! &middot; <i>D</i>!).
+    Polynomial regression maps <i>d</i> inputs into monomial combinations up to degree <i>D</i>: <i>y&#770;</i> = &Sigma; <i>w<sub>j</sub></i> &phi;<sub><i>j</i></sub>(<b>x</b>) + <i>b</i>. The total number of terms <i>P</i> grows combinatorially: <i>P</i> = C(<i>d</i> + <i>D</i>, <i>D</i>) = (<i>d</i> + <i>D</i>)! / (<i>d</i>! &middot; <i>D</i>!).
   </p>
   <table>
     <thead>
@@ -249,14 +345,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     </tbody>
   </table>
   <p>
-    As <i>P</i> grows, standard OLS amplifies multicollinearity and fits noise. To control this:
+    As <i>P</i> grows relative to <i>N</i> (1,000 samples), standard OLS amplifies multicollinearity and fits noise. Regularization adds a penalty on weights <b>w</b>:
   </p>
   <ul>
-    <li><strong>Lasso (<i>L</i><sub>1</sub> penalty):</strong> Loss = MSE + &alpha; &Sigma; |<i>w<sub>j</sub></i>|. Forces unneeded weights strictly to 0, performing automatic feature selection on combinatorial interaction terms.</li>
-    <li><strong>Ridge (<i>L</i><sub>2</sub> penalty):</strong> Loss = MSE + &alpha; &Sigma; <i>w<sub>j</sub></i><sup>2</sup>. Shrinks weights smoothly toward 0 without dropping terms, preserving 3D spatial field smoothness.</li>
+    <li><strong>Lasso (<i>L</i><sub>1</sub> penalty):</strong> Loss = MSE + &alpha; &Sigma; |<i>w<sub>j</sub></i>|. The diamond constraint forces unneeded weights strictly to 0, performing automatic feature selection on combinatorial interaction terms.</li>
+    <li><strong>Ridge (<i>L</i><sub>2</sub> penalty):</strong> Loss = MSE + &alpha; &Sigma; <i>w<sub>j</sub></i><sup>2</sup>. The circular constraint shrinks weights smoothly without setting them to 0, preventing coefficient explosion while preserving 3D spatial field continuity.</li>
   </ul>
   <div class="page-footer">
-    <span>ML Assignment 1 Report | BT2024054</span>
+    <span>Machine Learning Assignment 1 Report &bull; Roll Number: BT2024054</span>
     <span>Page 1 of 5</span>
   </div>
 
@@ -267,7 +363,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
   <h3>4.1 Stage 1: Baseline Using Problem Hints (<code>model1_baseline.py</code>)</h3>
   <p>
-    I started by implementing the hints in the problem description literally: degree 3 on <i>x</i><sub>1</sub>&ndash;<i>x</i><sub>3</sub> for <code>var1</code>, and degree 4 on <i>x</i><sub>1</sub> alone for <code>var2</code> using standard Ordinary Least Squares (OLS).
+    I started by directly testing the hints in the problem description: degree 3 on <i>x</i><sub>1</sub>&ndash;<i>x</i><sub>3</sub> for <code>var1</code>, and degree 4 on <i>x</i><sub>1</sub> alone for <code>var2</code> using standard Ordinary Least Squares (OLS).
   </p>
   <ul>
     <li><strong>var1 Baseline:</strong> Train <i>R</i><sup>2</sup> = 0.2254, 5-Fold CV <i>R</i><sup>2</sup> = <strong>0.1838 &plusmn; 0.029</strong>, CV MSE = <strong>8.9044 &plusmn; 1.785</strong></li>
@@ -288,7 +384,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
   <div class="figure-box">
     <img src="figures/bias_variance_tradeoff.png" alt="Bias Variance Tradeoff">
-    <div class="figure-caption">Figure 1: Cross-validation MSE vs. polynomial degree, displaying the U-shaped error curves that mark where unregularized OLS begins to overfit and highlighting the optimal regularized models.</div>
+    <div class="figure-caption">Figure 1: Validation MSE across polynomial degrees, displaying the U-shaped curves where unregularized OLS begins to overfit and marking the optimal regularized points.</div>
   </div>
 
   <p>
@@ -309,7 +405,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <div class="figure-caption">Figure 2: Top: Lasso setting 364 redundant terms to zero on var1 at degree 5. Bottom: Ridge weight shrinkage on var2 keeping coefficients stable (norm 38.9) compared to the exploded weights of unconstrained OLS (norm 27,038).</div>
   </div>
   <div class="page-footer">
-    <span>ML Assignment 1 Report | BT2024054</span>
+    <span>Machine Learning Assignment 1 Report &bull; Roll Number: BT2024054</span>
     <span>Page 2 of 5</span>
   </div>
 
@@ -344,7 +440,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <th>Train MSE</th>
         <th>5-Fold CV <i>R</i><sup>2</sup></th>
         <th>5-Fold CV MSE</th>
-        <th>Evaluation</th>
+        <th>Status</th>
       </tr>
     </thead>
     <tbody>
@@ -360,7 +456,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <td>8.452</td>
         <td>0.1838 &plusmn; 0.029</td>
         <td>8.9044 &plusmn; 1.785</td>
-        <td>Heavy underfitting</td>
+        <td><span class="badge badge-warn">Underfit</span></td>
       </tr>
       <tr>
         <td><strong>M1</strong></td>
@@ -374,7 +470,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <td>36.036</td>
         <td>0.1058 &plusmn; 0.042</td>
         <td>36.678 &plusmn; 8.020</td>
-        <td>Heavy underfitting</td>
+        <td><span class="badge badge-warn">Underfit</span></td>
       </tr>
       <tr>
         <td><strong>M2</strong></td>
@@ -388,7 +484,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <td>0.408</td>
         <td>0.9230 &plusmn; 0.020</td>
         <td>0.8081 &plusmn; 0.117</td>
-        <td>Solid unreg. baseline</td>
+        <td>OLS peak</td>
       </tr>
       <tr>
         <td><strong>M2</strong></td>
@@ -402,7 +498,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <td>0.178</td>
         <td>0.9927 &plusmn; 0.002</td>
         <td>0.2896 &plusmn; 0.033</td>
-        <td>Solid unreg. baseline</td>
+        <td>OLS peak</td>
       </tr>
       <tr>
         <td><strong>M3</strong></td>
@@ -416,7 +512,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <td>0.248</td>
         <td>0.9687 &plusmn; 0.006</td>
         <td>0.3325 &plusmn; 0.034</td>
-        <td>Sparsity prunes terms</td>
+        <td>Pruned 79%</td>
       </tr>
       <tr>
         <td><strong>M3</strong></td>
@@ -430,7 +526,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <td>0.168</td>
         <td>0.9929 &plusmn; 0.001</td>
         <td>0.2835 &plusmn; 0.036</td>
-        <td>Smooth shrinkage</td>
+        <td>Smooth L2</td>
       </tr>
       <tr class="highlight">
         <td><strong>M3+</strong></td>
@@ -444,7 +540,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <td><strong>0.248</strong></td>
         <td><strong>0.9689 &plusmn; 0.005</strong></td>
         <td><strong>0.3218 &plusmn; 0.031</strong></td>
-        <td><strong>WINNER (Final Submit)</strong></td>
+        <td><span class="badge badge-win">WINNER</span></td>
       </tr>
       <tr class="highlight">
         <td><strong>M3+</strong></td>
@@ -458,7 +554,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <td><strong>0.168</strong></td>
         <td><strong>0.9929 &plusmn; 0.001</strong></td>
         <td><strong>0.2835 &plusmn; 0.036</strong></td>
-        <td><strong>WINNER (Final Submit)</strong></td>
+        <td><span class="badge badge-win">WINNER</span></td>
       </tr>
       <tr>
         <td><strong>M4</strong></td>
@@ -486,7 +582,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <td>0.052</td>
         <td>&minus;4.9055 &plusmn; 5.333</td>
         <td>285.50 &plusmn; 291.0</td>
-        <td>Catastrophic collapse</td>
+        <td><span class="badge badge-warn">Overfit</span></td>
       </tr>
     </tbody>
   </table>
@@ -496,7 +592,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <div class="figure-caption">Figure 3: Cross-validation <i>R</i><sup>2</sup> (left) and logarithmic Mean Squared Error (right) across all four model configurations for both tasks.</div>
   </div>
   <div class="page-footer">
-    <span>ML Assignment 1 Report | BT2024054</span>
+    <span>Machine Learning Assignment 1 Report &bull; Roll Number: BT2024054</span>
     <span>Page 3 of 5</span>
   </div>
 
@@ -538,7 +634,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     </li>
   </ul>
   <div class="page-footer">
-    <span>ML Assignment 1 Report | BT2024054</span>
+    <span>Machine Learning Assignment 1 Report &bull; Roll Number: BT2024054</span>
     <span>Page 4 of 5</span>
   </div>
 
@@ -588,12 +684,12 @@ python3 model2_ols_sweep.py      # Stage 2: Data-driven OLS sweep
 python3 model3_regularized.py    # Stage 3: Regularized models
 python3 model4_overfit.py        # Stage 4: Overfitting demonstration</pre>
 
-  <p>
+  <p style="margin-top: 8px;">
     <strong>Official Repository Link:</strong> <a href="https://github.com/Ayush-patel9/ML_ASSIGNMENT">https://github.com/Ayush-patel9/ML_ASSIGNMENT</a><br>
-    <strong>Author:</strong> Ayush Patel (Roll Number: <strong>BT2024054</strong>)
+    <strong>Author:</strong> Ayush Patel (Roll Number: <strong>BT2024054</strong>) &bull; Department of Computer Science &bull; October 2026
   </p>
   <div class="page-footer">
-    <span>ML Assignment 1 Report | BT2024054</span>
+    <span>Machine Learning Assignment 1 Report &bull; Roll Number: BT2024054</span>
     <span>Page 5 of 5</span>
   </div>
 
@@ -626,7 +722,22 @@ def generate_pdf():
         num_pages = len(doc)
         print(f"SUCCESS: Generated {output_pdf} with {num_pages} pages!")
         shutil.copy(output_pdf, "REPORT.pdf")
-        print("Copied to REPORT.pdf as well.")
+        
+        # Check blank space distribution on each page
+        for i, page in enumerate(doc):
+            pix = page.get_pixmap(dpi=150)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples).convert("L")
+            arr = np.array(img)
+            non_white = np.where(arr < 250)[0]
+            if len(non_white) > 0:
+                top = non_white[0]
+                bot = non_white[-1]
+                span = (bot - top) / arr.shape[0] * 100
+                blank_bot = (arr.shape[0] - bot) / arr.shape[0] * 100
+                print(f"  Page {i+1}: Content span: {span:.1f}%, Blank bottom: {blank_bot:.1f}%")
+        
+        if os.path.exists(html_file):
+            os.remove(html_file)
         return num_pages
     else:
         print("ERROR: PDF was not created!")
